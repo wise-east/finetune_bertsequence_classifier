@@ -1,6 +1,5 @@
 import os 
 import numpy as np 
-import matplotlib.pyplot as plt
 import json
 import random 
 import logging
@@ -30,7 +29,7 @@ RANDOM_STATE = 2018
 def get_data_loaders(args, tokenizer):
 
     data = get_data(args.data_path)
-    input_ids, attention_masks, segment_ids, labels = build_bert_input(data, tokenizer)
+    input_ids, attention_masks, segment_ids, labels = build_bert_input(data, args.data_path, tokenizer)
 
     # split the data for training and validation
     train_inputs, validation_inputs, train_labels, validation_labels = train_test_split(input_ids, labels, random_state=RANDOM_STATE, test_size=args.test_size)
@@ -55,7 +54,7 @@ def get_data_loaders(args, tokenizer):
 
 def train(): 
     parser = ArgumentParser()
-    parser.add_argument("--data_path", type=str, default=YESAND_DATAPATH, help="Set learning rate.")    
+    parser.add_argument("--data_path", type=str, default=YESAND_DATAPATH, help="Set data path.")    
     parser.add_argument("--correct_bias", type=bool, default=False, help="Set to true to correct bias for Adam optimizer")
     parser.add_argument("--lr", type=float, default=2e-5, help="Set learning rate.")
     parser.add_argument("--n_epochs", type=int, default=5, help="Set number of epochs.")
@@ -119,13 +118,13 @@ def train():
         
         with torch.no_grad(): 
             logits = model(b_input_ids, token_type_ids = b_input_segment, attention_mask=b_input_mask)
-            logits = logits[0].detach().cpu().numpy()
-            label_ids = b_labels.to('cpu').long().numpy() 
+            logits = logits[0]
+            label_ids = b_labels
 
         return logits, label_ids
     evaluator = Engine(inference)
 
-    trainer.add_event_handler(Events.EPOCH_COMPLETED, lambda _: evaluator.run(val_loader))
+    trainer.add_event_handler(Events.EPOCH_COMPLETED, lambda _: evaluator.run(valid_loader))
 
     RunningAverage(output_transform=lambda x: x).attach(trainer, "loss") 
     metrics = {"recall": Recall(output_transform=lambda x: (x[0], x[1])), "precision": Precision(output_transform=lambda x: (x[0], x[1])), "accuracy": Accuracy(output_transform=lambda x: (x[0], x[1]))}

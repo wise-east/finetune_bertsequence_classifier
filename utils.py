@@ -3,6 +3,8 @@ from keras.preprocessing.sequence import pad_sequences
 import logging
 import json 
 import random
+import torch
+import os
 
 logger = logging.getLogger(__file__)
 
@@ -56,6 +58,8 @@ def build_attention_mask(input_ids):
 
     return attention_masks 
 
+
+# TODO: Adjust this function for loading your data 
 def get_data(data_path=None):
 
     data_path = data_path or YESAND_DATAPATH
@@ -65,38 +69,48 @@ def get_data(data_path=None):
         data = json.load(f) 
     logger.info("Loaded data from: {}".format(data_path))
 
-    # make sure data set is balanced
-    total_yes_ands = 0
-    for k in data['yes-and'].keys(): 
-        total_yes_ands += len(data['yes-and'][k])
+    # # make sure data set is balanced
+    # total_yes_ands = 0
+    # for k in data['yes-and'].keys(): 
+    #     total_yes_ands += len(data['yes-and'][k])
     
-    logger.info("Total number of yes-ands: {}".format(total_yes_ands))
+    # logger.info("Total number of yes-ands: {}".format(total_yes_ands))
 
     return data 
 
-def build_bert_input(data, tokenizer): 
+
+
+# TODO: Adjust this function for formatting your data 
+def build_bert_input(data, data_path, tokenizer): 
 
     """
     Format data as BERT input 
     sequence: "[CLS] <sentence1> [SEP] <sentence2> [SEP]"
     """
-    all_samples = [] 
-    for non_yesand in data['non-yes-and']['cornell']: 
-        seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['p'], non_yesand['r'])
-        all_samples.append([0, seq])
-    
-    for k in data['yes-and'].keys(): 
-        for yesand in data['yes-and'][k]: 
-            seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['p'], yesand['r'])
-            all_samples.append([1, seq])
+    cache_fp = data_path[:data_path.rfind('.')] + '_cache'
+    if os.path.isfile(cache_fp): 
+        logger.info("Loading tokenized data from cache...")
+        tokenized_texts = torch.load(cache_fp)
+    else: 
+        logger.info("Tokenizing loaded data...")
+        all_samples = [] 
+        for non_yesand in data['non-yes-and']['cornell']: 
+            seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['p'], non_yesand['r'])
+            all_samples.append([0, seq])
         
-    random.shuffle(all_samples)
+        for k in data['yes-and'].keys(): 
+            for yesand in data['yes-and'][k]: 
+                seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['p'], yesand['r'])
+                all_samples.append([1, seq])
+            
+        random.shuffle(all_samples)
 
-    sentences = [x[1] for x in all_samples]
-    labels = [x[0] for x in all_samples]
+        sentences = [x[1] for x in all_samples]
+        labels = [x[0] for x in all_samples]
 
-    # tokenize with BERT tokenizer 
-    tokenized_texts = [tokenizer.encode(sentence) for sentence in sentences]
+        # tokenize with BERT tokenizer 
+        tokenized_texts = [tokenizer.encode(sentence) for sentence in sentences]
+        torch.save(cache_fp)
 
     # pad input to MAX_LEN
     input_ids = pad_sequences(tokenized_texts, maxlen=MAX_LEN, dtype="long", truncating="post", padding="post")
