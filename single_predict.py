@@ -48,10 +48,12 @@ def main():
     model = BertForSequenceClassification.from_pretrained(args.model_checkpoint)
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-    prompt = input("Prompt: ")
-    response = input("Response: ")
+    while True: 
+        prompt = input("Prompt: ")
+        response = input("Response: ")
 
-    predict_single(model, tokenizer, prompt, response)
+        predict_single(model, tokenizer, prompt, response)
+        print('\n\n')
 
 
 if __name__ == "__main__": 
