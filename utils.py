@@ -8,7 +8,7 @@ import os
 
 logger = logging.getLogger(__file__)
 
-YESAND_DATAPATH = '../yes-and-data.json'
+YESAND_DATAPATH = 'data/yes-and-data.json'
 MAX_LEN = 128 
 
 
@@ -87,30 +87,31 @@ def build_bert_input(data, data_path, tokenizer):
     Format data as BERT input 
     sequence: "[CLS] <sentence1> [SEP] <sentence2> [SEP]"
     """
+
+    all_samples = [] 
+    for non_yesand in data['non-yes-and']['cornell']: 
+        seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['p'], non_yesand['r'])
+        all_samples.append([0, seq])
+    
+    for k in data['yes-and'].keys(): 
+        for yesand in data['yes-and'][k]: 
+            seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['p'], yesand['r'])
+            all_samples.append([1, seq])
+        
+    random.shuffle(all_samples)
+
+    sentences = [x[1] for x in all_samples]
+    labels = [x[0] for x in all_samples]
+
     cache_fp = data_path[:data_path.rfind('.')] + '_cache'
     if os.path.isfile(cache_fp): 
         logger.info("Loading tokenized data from cache...")
         tokenized_texts = torch.load(cache_fp)
     else: 
         logger.info("Tokenizing loaded data...")
-        all_samples = [] 
-        for non_yesand in data['non-yes-and']['cornell']: 
-            seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['p'], non_yesand['r'])
-            all_samples.append([0, seq])
-        
-        for k in data['yes-and'].keys(): 
-            for yesand in data['yes-and'][k]: 
-                seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['p'], yesand['r'])
-                all_samples.append([1, seq])
-            
-        random.shuffle(all_samples)
-
-        sentences = [x[1] for x in all_samples]
-        labels = [x[0] for x in all_samples]
-
         # tokenize with BERT tokenizer 
         tokenized_texts = [tokenizer.encode(sentence) for sentence in sentences]
-        torch.save(cache_fp)
+        torch.save(tokenized_texts, cache_fp)
 
     # pad input to MAX_LEN
     input_ids = pad_sequences(tokenized_texts, maxlen=MAX_LEN, dtype="long", truncating="post", padding="post")
