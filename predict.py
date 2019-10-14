@@ -134,7 +134,7 @@ def get_cornell_data(data_path):
 def predict(): 
     """Determine which are yes-ands are not from a given dialogue data set with a finetuned BERT yes-and classifier"""
     parser = ArgumentParser()
-    parser.add_argument("--model_checkpoint", default="runs/yesand_bert_classifier8577", help="Provide a directory for a pretrained BERT model.")
+    parser.add_argument("--model_checkpoint", default="runs/yesand_bert_classifier10357", help="Provide a directory for a pretrained BERT model.")
     parser.add_argument("--data_path", default="data/reformatted_cornell.json", help="Provide a datapath for which predictions will be made.")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
     parser.add_argument("--predictions_folder", default="data/", help="Provide a folderpath for which predictions will be saved to.")
