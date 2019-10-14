@@ -10,8 +10,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 import torch 
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
-from transformers import BertTokenizer, BertConfig, BertModel, BertForSequenceClassification, AdamW, WEIGHTS_NAME, CONFIG_NAME
-from transformers import RobertaTokenizer, RobertaConfig, RobertaForSequenceClassification, RobertaModel
+from transformers import RobertaTokenizer, RobertaConfig, RobertaForSequenceClassification, RobertaModel, AdamW, WEIGHTS_NAME, CONFIG_NAME
 from transformers.optimization import WarmupLinearSchedule
 from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint
@@ -19,30 +18,30 @@ from ignite.metrics import Accuracy, Loss, MetricsLambda, RunningAverage, Precis
 from ignite.contrib.handlers import ProgressBar, PiecewiseLinear
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, OutputHandler, OptimizerParamsHandler
 
-from utils import  build_bert_input, get_data, YESAND_DATAPATH
+from utils import  get_data, YESAND_DATAPATH, build_roberta_input
 
 logger = logging.getLogger(__file__)
 
 # recommended settings: batch size = 32, max length = 128 
-BATCH_SIZE = 32 
-RANDOM_STATE = 2018 
+BATCH_SIZE = 16
+RANDOM_STATE = 42
 
 def get_data_loaders(args, tokenizer):
 
     data = get_data(args.data_path)
-    input_ids, attention_masks, segment_ids, labels = build_bert_input(data, args.data_path, tokenizer)
+    all_samples = build_roberta_input(data, args.data_path, tokenizer)
+    train_samples, validation_samples = train_test_split(all_samples, random_state=RANDOM_STATE, test_size=args.test_size)
 
-    # split the data for training and validation
-    train_inputs, validation_inputs, train_labels, validation_labels = train_test_split(input_ids, labels, random_state=RANDOM_STATE, test_size=args.test_size)
-    train_masks, validation_masks, train_segments, validation_segments = train_test_split(attention_masks, segment_ids, random_state=RANDOM_STATE, test_size=args.test_size)
+    train_inputs, train_labels, train_masks, train_token_types = [s['input_ids'] for s in train_samples], [s['label'] for s in train_samples], [s['attention_mask'] for s in train_samples], [s['token_type_ids'] for s in train_samples] 
+    validation_inputs, validation_labels, validation_masks, validation_token_types = [s['input_ids'] for s in validation_samples], [s['label'] for s in validation_samples], [s['attention_mask'] for s in validation_samples], [s['token_type_ids'] for s in validation_samples] 
 
     # wrap the data as tensors 
-    train_inputs, train_labels, train_masks, train_segments = [torch.tensor(x) for x in [train_inputs, train_labels, train_masks, train_segments]]
-    validation_inputs, validation_labels, validation_masks, validation_segments = [torch.tensor(x) for x in [validation_inputs, validation_labels, validation_masks, validation_segments]]
+    train_inputs, train_labels, train_masks, train_token_types = [torch.tensor(x) for x in [train_inputs, train_labels, train_masks, train_token_types]]
+    validation_inputs, validation_labels, validation_masks, validation_token_types = [torch.tensor(x) for x in [validation_inputs, validation_labels, validation_masks, validation_token_types]]
 
     # group as tensor datasets
-    train_data = TensorDataset(train_inputs, train_masks, train_segments, train_labels)
-    validation_data = TensorDataset(validation_inputs, validation_masks, validation_segments, validation_labels)
+    train_data = TensorDataset(train_inputs, train_masks, train_token_types, train_labels)
+    validation_data = TensorDataset(validation_inputs, validation_masks, validation_token_types, validation_labels)
 
     # build dataloaders
     train_sampler = RandomSampler(train_data) 
@@ -57,13 +56,14 @@ def train():
     parser = ArgumentParser()
     parser.add_argument("--data_path", type=str, default=YESAND_DATAPATH, help="Set data path.")    
     parser.add_argument("--correct_bias", type=bool, default=False, help="Set to true to correct bias for Adam optimizer")
-    parser.add_argument("--lr", type=float, default=2e-5, help="Set learning rate.")
+    parser.add_argument("--lr", type=float, default=5e-6, help="Set learning rate.")
     parser.add_argument("--n_epochs", type=int, default=5, help="Set number of epochs.")
     parser.add_argument("--num_warmup_steps", type=float, default=1000, help="Set number of warm-up steps")
     parser.add_argument("--num_total_steps", type=float, default=10000, help="Set number of total steps.")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
     parser.add_argument("--max_grad_norm", type=float, default=1.0, help="Set maximum gradient normalization.")
     parser.add_argument("--test_size", type=float, default=0.1, help="Set proportion of validation size split")
+    parser.add_argument("--pretrained_path", type=str, default='roberta-large', help="Choose which pretrained Roberta to use (roberta-base, roberta-large, roberta-large-mnli)")    
     args = parser.parse_args() 
 
     logging.basicConfig(level=logging.INFO)
@@ -71,8 +71,10 @@ def train():
 
     # initialize tokenizer and model 
     logger.info("Initialize model and tokenizer.")
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', cache_dir = '../')
-    model = BertForSequenceClassification.from_pretrained("bert-base-uncased", cache_dir = '../')
+    # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    tokenizer = RobertaTokenizer.from_pretrained(args.pretrained_path, cache_dir = '../')
+    # model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
+    model = RobertaForSequenceClassification.from_pretrained(args.pretrained_path, cache_dir='../')
     model.to(args.device)
 
     param_optimizer = list(model.named_parameters())
@@ -95,6 +97,8 @@ def train():
     def update(engine, batch): 
         model.train() 
         batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
+
+        import pdb; pdb.set_trace()
         b_input_ids, b_input_mask, b_input_segment, b_labels = batch
 
         optimizer.zero_grad()

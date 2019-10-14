@@ -7,7 +7,7 @@ from torch.utils.data import TensorDataset, DataLoader, RandomSampler, Sequentia
 from pytorch_transformers import BertTokenizer, BertConfig, BertModel, BertForSequenceClassification, AdamW
 from pytorch_transformers.optimization import WarmupLinearSchedule 
 from argparse import ArgumentParser
-from utils import build_segment_ids 
+from utils import build_segment_ids, MAX_LEN, ROBERTA_MAX_LEN
 
 import re 
 import os
@@ -17,7 +17,6 @@ from tqdm import tqdm
 from pprint import pformat
 
 logger = logging.getLogger(__file__)
-MAX_LEN = 128 
 PREDICTION_BATCH_SIZE = 256
 
 
@@ -134,7 +133,7 @@ def get_cornell_data(data_path):
 def predict(): 
     """Determine which are yes-ands are not from a given dialogue data set with a finetuned BERT yes-and classifier"""
     parser = ArgumentParser()
-    parser.add_argument("--model_checkpoint", default="runs/yesand_bert_classifier10357", help="Provide a directory for a pretrained BERT model.")
+    parser.add_argument("--model_checkpoint", default="runs/yesand_bert_classifier_cornell1", help="Provide a directory for a pretrained BERT model.")
     parser.add_argument("--data_path", default="data/reformatted_cornell.json", help="Provide a datapath for which predictions will be made.")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
     parser.add_argument("--predictions_folder", default="data/", help="Provide a folderpath for which predictions will be saved to.")

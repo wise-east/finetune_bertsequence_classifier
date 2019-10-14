@@ -5,12 +5,13 @@ import json
 import random
 import torch
 import os
+from typing import * 
 
 logger = logging.getLogger(__file__)
 
 YESAND_DATAPATH = 'data/yes-and-data.json'
-MAX_LEN = 128 
-
+MAX_LEN = 128
+ROBERTA_MAX_LEN = 512
 
 def calc_metrics(pred, labels): 
     """Function to calculate the accuracy of predictions vs labels """
@@ -78,9 +79,58 @@ def get_data(data_path=None):
 
     return data 
 
+def get_roberta_inputs(seq1: str, seq2:str, tokenizer: object): 
+    # input_ids: tokenize input and prepare them into correct format
+    # token_type_ids: ids that differentiate seq1 and seq2
+    # attention_mask: identify padding 
+
+    seq1 = tokenizer.encode(seq1)
+    seq2 = tokenizer.encode(seq2)
+    input_ids = tokenizer.build_inputs_with_special_tokens(seq1, seq2)
+    input_ids += [tokenizer.pad_token_id] * (ROBERTA_MAX_LEN - len(input_ids)) #pad
+
+    token_type_ids = tokenizer.create_token_type_ids_from_sequences(seq1, seq2) 
+    token_type_ids += [tokenizer.pad_token_id] * (ROBERTA_MAX_LEN - len(token_type_ids)) #pad
+
+    attention_mask = [float(i!=tokenizer.pad_token_id) for i in input_ids] #attention mask 
+
+    assert len(input_ids) == len(token_type_ids) == len(attention_mask) == ROBERTA_MAX_LEN
+
+    return input_ids, token_type_ids, attention_mask 
+
+
+def build_roberta_input(data: str, data_path: str, tokenizer: object): 
+    # Build robert input from yes-and data or load from cache 
+
+    # cache name identified by tokenizer's name so that cache files created with different tokenizers are differentiated
+    cache_fp = data_path[:data_path.rfind('.')] + "_" + type(tokenizer).__name__
+    if os.path.isfile(cache_fp): 
+        logger.info("Loading tokenized data from cache...")
+        all_samples = torch.load(cache_fp)
+        return all_samples
+
+    logger.info("Preparing and tokenizing yes-and data...")
+    all_samples = [] 
+    for k in data['non-yes-and'].keys():
+        for non_yesand in data['non-yes-and'][k]: 
+            input_ids, token_type_ids, attention_mask = get_roberta_inputs(non_yesand['prompt'], non_yesand['response'], tokenizer)
+            all_samples.append({"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask, "label": 0})
+
+    for k in data['yes-and'].keys(): 
+        for yesand in data['yes-and'][k]: 
+            input_ids, token_type_ids, attention_mask = get_roberta_inputs(yesand['prompt'], yesand['response'], tokenizer)
+            all_samples.append({"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask, "label": 1})
+
+    
+    torch.save(all_samples, cache_fp)
+
+    return all_samples 
+
 
 
 # TODO: Adjust this function for formatting your data 
+## There may be some issues with the saving and loading process of cache files
+## Tokenized text and labels may not align 
 def build_bert_input(data, data_path, tokenizer): 
 
     """
@@ -90,12 +140,12 @@ def build_bert_input(data, data_path, tokenizer):
 
     all_samples = [] 
     for non_yesand in data['non-yes-and']['cornell']: 
-        seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['p'], non_yesand['r'])
+        seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['prompt'], non_yesand['response'])
         all_samples.append([0, seq])
     
     for k in data['yes-and'].keys(): 
         for yesand in data['yes-and'][k]: 
-            seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['p'], yesand['r'])
+            seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['prompt'], yesand['response'])
             all_samples.append([1, seq])
         
     random.shuffle(all_samples)
@@ -103,7 +153,7 @@ def build_bert_input(data, data_path, tokenizer):
     sentences = [x[1] for x in all_samples]
     labels = [x[0] for x in all_samples]
 
-    cache_fp = data_path[:data_path.rfind('.')] + '_cache'
+    cache_fp = data_path[:data_path.rfind('.')] + "_" + type(tokenizer).__name__
     if os.path.isfile(cache_fp): 
         logger.info("Loading tokenized data from cache...")
         tokenized_texts = torch.load(cache_fp)
