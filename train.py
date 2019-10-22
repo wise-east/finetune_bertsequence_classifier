@@ -16,6 +16,7 @@ from transformers.optimization import WarmupLinearSchedule
 from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint
 from ignite.metrics import Accuracy, Loss, MetricsLambda, RunningAverage, Precision, Recall
+from ignite.contrib.metrics import GpuInfo
 from ignite.contrib.handlers import ProgressBar, PiecewiseLinear
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, OutputHandler, OptimizerParamsHandler
 
@@ -55,6 +56,7 @@ def get_data_loaders(args, tokenizer):
 
 def train(): 
     parser = ArgumentParser()
+    parser.add_argument("--model", type=str, default='bert-base-uncased', help="Set data path.")    
     parser.add_argument("--data_path", type=str, default=YESAND_DATAPATH, help="Set data path.")    
     parser.add_argument("--correct_bias", type=bool, default=False, help="Set to true to correct bias for Adam optimizer")
     parser.add_argument("--lr", type=float, default=2e-5, help="Set learning rate.")
@@ -71,8 +73,8 @@ def train():
 
     # initialize tokenizer and model 
     logger.info("Initialize model and tokenizer.")
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', cache_dir = '../')
-    model = BertForSequenceClassification.from_pretrained("bert-base-uncased", cache_dir = '../')
+    tokenizer = BertTokenizer.from_pretrained(args.model, cache_dir = '../')
+    model = BertForSequenceClassification.from_pretrained(args.model, cache_dir = '../')
     model.to(args.device)
 
     param_optimizer = list(model.named_parameters())
@@ -106,7 +108,7 @@ def train():
         optimizer.step() 
         scheduler.step() 
 
-        return loss.item() 
+        return loss.item(), logits, b_labels
 
     trainer = Engine(update)     
 
@@ -127,18 +129,22 @@ def train():
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED, lambda _: evaluator.run(valid_loader))
 
-    RunningAverage(output_transform=lambda x: x).attach(trainer, "loss") 
+    RunningAverage(output_transform=lambda x: x[0]).attach(trainer, "loss") 
+    RunningAverage(Accuracy(output_transform=lambda x: (x[1], x[2]))).attach(trainer, "accuracy")
+    GpuInfo().attach(trainer, name='gpu')
+
     metrics = {"recall": Recall(output_transform=lambda x: (x[0], x[1])), "precision": Precision(output_transform=lambda x: (x[0], x[1])), "accuracy": Accuracy(output_transform=lambda x: (x[0], x[1]))}
 
     for name, metric in metrics.items(): 
         metric.attach(evaluator, name) 
 
     pbar = ProgressBar(persist=True)
-    pbar.attach(trainer, metric_names=['loss'])
+    pbar.attach(trainer, metric_names=['loss', 'accuracy'])
+    pbar.attach(trainer, metric_names=['gpu:0 mem(%)', 'gpu:0 util(%)'])
     evaluator.add_event_handler(Events.COMPLETED, lambda _: pbar.log_message("Validation %s" % pformat(evaluator.state.metrics)))
 
     tb_logger = TensorboardLogger(log_dir=None)
-    tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss"]), event_name=Events.ITERATION_COMPLETED)
+    tb_logger.attach(trainer, log_handler=OutputHandler(tag="training", metric_names=["loss", "accuracy"]), event_name=Events.ITERATION_COMPLETED)
     tb_logger.attach(trainer, log_handler=OptimizerParamsHandler(optimizer), event_name=Events.ITERATION_STARTED)
     tb_logger.attach(evaluator, log_handler=OutputHandler(tag="validation", metric_names=list(metrics.keys()), another_engine=trainer), event_name=Events.EPOCH_COMPLETED)
 

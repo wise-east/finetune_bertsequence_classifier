@@ -47,7 +47,7 @@ def filter(predictions):
 
     return potential_yesands
 
-predictions_fp = 'data/predictions_yesand_bert_classifier10357.json'
+predictions_fp = 'data/predictions_yesand_cornell_bert_base_iter1.json'
 with open(predictions_fp, 'r') as f: 
     predictions = json.load(f) 
 

@@ -11,7 +11,7 @@ logger = logging.getLogger(__file__)
 
 YESAND_DATAPATH = 'data/yes-and-data.json'
 MAX_LEN = 128
-ROBERTA_MAX_LEN = 512
+ROBERTA_MAX_LEN = 256
 
 def calc_metrics(pred, labels): 
     """Function to calculate the accuracy of predictions vs labels """
@@ -86,6 +86,7 @@ def get_roberta_inputs(seq1: str, seq2:str, tokenizer: object):
 
     seq1 = tokenizer.encode(seq1)
     seq2 = tokenizer.encode(seq2)
+
     input_ids = tokenizer.build_inputs_with_special_tokens(seq1, seq2)
     input_ids += [tokenizer.pad_token_id] * (ROBERTA_MAX_LEN - len(input_ids)) #pad
 
@@ -94,16 +95,22 @@ def get_roberta_inputs(seq1: str, seq2:str, tokenizer: object):
 
     attention_mask = [float(i!=tokenizer.pad_token_id) for i in input_ids] #attention mask 
 
+    if len(input_ids) > ROBERTA_MAX_LEN: 
+        logger.info(f"Length of input sequence ({len(input_ids)}) is longer than ROBERTA_MAX_LEN {ROBERTA_MAX_LEN}. Increase ROBERTA_MAX_LEN or this instance will be cropped.")
+        input_ids = input_ids[:ROBERTA_MAX_LEN]
+        token_type_ids = token_type_ids[:ROBERTA_MAX_LEN]
+        attention_mask = attention_mask[:ROBERTA_MAX_LEN]
+
     assert len(input_ids) == len(token_type_ids) == len(attention_mask) == ROBERTA_MAX_LEN
 
-    return input_ids, token_type_ids, attention_mask 
+    return input_ids, token_type_ids, attention_mask
 
 
 def build_roberta_input(data: str, data_path: str, tokenizer: object): 
     # Build robert input from yes-and data or load from cache 
 
     # cache name identified by tokenizer's name so that cache files created with different tokenizers are differentiated
-    cache_fp = data_path[:data_path.rfind('.')] + "_" + type(tokenizer).__name__
+    cache_fp = f"{data_path[:data_path.rfind('.')]}_{type(tokenizer).__name__}_{str(ROBERTA_MAX_LEN)}_cache"
     if os.path.isfile(cache_fp): 
         logger.info("Loading tokenized data from cache...")
         all_samples = torch.load(cache_fp)
@@ -152,16 +159,21 @@ def build_bert_input(data, data_path, tokenizer):
 
     sentences = [x[1] for x in all_samples]
     labels = [x[0] for x in all_samples]
+    logger.info("Tokenizing loaded data...")
+    tokenized_texts = [tokenizer.encode(sentence) for sentence in sentences]
 
-    cache_fp = data_path[:data_path.rfind('.')] + "_" + type(tokenizer).__name__
-    if os.path.isfile(cache_fp): 
-        logger.info("Loading tokenized data from cache...")
-        tokenized_texts = torch.load(cache_fp)
-    else: 
-        logger.info("Tokenizing loaded data...")
-        # tokenize with BERT tokenizer 
-        tokenized_texts = [tokenizer.encode(sentence) for sentence in sentences]
-        torch.save(tokenized_texts, cache_fp)
+
+    # cache_fp = data_path[:data_path.rfind('.')] + "_" + type(tokenizer).__name__
+    # if os.path.isfile(cache_fp): 
+    #     logger.info("Loading tokenized data from cache...")
+    #     tokenized_texts = torch.load(cache_fp)
+    # else: 
+    #     logger.info("Tokenizing loaded data...")
+    #     # tokenize with BERT tokenizer 
+    #     tokenized_texts = [tokenizer.encode(sentence) for sentence in sentences]
+    #     torch.save(tokenized_texts, cache_fp)
+
+
 
     # pad input to MAX_LEN
     input_ids = pad_sequences(tokenized_texts, maxlen=MAX_LEN, dtype="long", truncating="post", padding="post")

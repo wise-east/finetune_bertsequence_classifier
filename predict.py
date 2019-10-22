@@ -4,8 +4,8 @@ from keras.preprocessing.sequence import pad_sequences
 import numpy as np 
 import torch 
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
-from pytorch_transformers import BertTokenizer, BertConfig, BertModel, BertForSequenceClassification, AdamW
-from pytorch_transformers.optimization import WarmupLinearSchedule 
+from transformers import BertTokenizer, BertConfig, BertModel, BertForSequenceClassification, AdamW
+from transformers.optimization import WarmupLinearSchedule 
 from argparse import ArgumentParser
 from utils import build_segment_ids, MAX_LEN, ROBERTA_MAX_LEN
 
@@ -133,7 +133,8 @@ def get_cornell_data(data_path):
 def predict(): 
     """Determine which are yes-ands are not from a given dialogue data set with a finetuned BERT yes-and classifier"""
     parser = ArgumentParser()
-    parser.add_argument("--model_checkpoint", default="runs/yesand_bert_classifier_cornell1", help="Provide a directory for a pretrained BERT model.")
+    parser.add_argument("--model", default="bert-base-uncased", help="Provide pretrained model type that is consisten with BERT model that was fine-tuned.")
+    parser.add_argument("--model_checkpoint", default="runs/yesand_cornell_bert_base_iter1", help="Provide a directory for a pretrained BERT model.")
     parser.add_argument("--data_path", default="data/reformatted_cornell.json", help="Provide a datapath for which predictions will be made.")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
     parser.add_argument("--predictions_folder", default="data/", help="Provide a folderpath for which predictions will be saved to.")
@@ -145,7 +146,7 @@ def predict():
 
     logger.info("Loading model and tokenizer.")
     model = BertForSequenceClassification.from_pretrained(args.model_checkpoint)
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    tokenizer = BertTokenizer.from_pretrained(args.model)
 
     logger.info("Loading data to predict: {}".format(args.data_path))
     data_to_predict = get_cornell_data(args.data_path)
