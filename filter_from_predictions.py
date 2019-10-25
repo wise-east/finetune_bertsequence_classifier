@@ -1,7 +1,6 @@
 import json 
 import re 
-
-THRESHOLD = 0.95
+from argparse import ArgumentParser
 
 def replace_bad_characters(text): 
 
@@ -16,7 +15,7 @@ def replace_bad_characters(text):
 
     return text 
 
-def filter(predictions): 
+def filter(predictions, args): 
     ''' 
     Filter predictions based on criteria 
     ''' 
@@ -24,7 +23,7 @@ def filter(predictions):
     potential_yesands = [] 
     for prediction in predictions: 
         # confidence must be above the threshold 
-        if prediction['confidence']['yesand'] < THRESHOLD*100:
+        if prediction['confidence']['yesand'] < args.threshold*100:
             continue 
 
         # process characters that MTURK cannot process: 
@@ -47,15 +46,26 @@ def filter(predictions):
 
     return potential_yesands
 
-predictions_fp = 'data/predictions_yesand_cornell_bert_base_iter1.json'
-with open(predictions_fp, 'r') as f: 
-    predictions = json.load(f) 
 
-potential_yesands = filter(predictions)
+def main(): 
+    parser = ArgumentParser() 
+    parser.add_argument('--fp', type=str, help="File path of predictions to filter")
+    parser.add_argument('--threshold',  type=float, default=0.95, help="Confidence threshold to filter classified results")
 
-proportion = round(len(potential_yesands) / len(predictions) * 100,2) 
-print(f"{len(potential_yesands)} predictions, {proportion}% of all predictions, were yes-ands for a confidence threshold of {THRESHOLD}.")
+    args = parser.parse_args() 
 
-filtered_predictions_fp = predictions_fp[:predictions_fp.find('/')+1] + f'filtered_{THRESHOLD*100}_' + predictions_fp[predictions_fp.find('/')+1:]
-with open(filtered_predictions_fp, 'w') as f: 
-    json.dump(potential_yesands, f, indent=4) 
+    with open(args.fp, 'r') as f: 
+        predictions = json.load(f) 
+
+    potential_yesands = filter(predictions, args)
+
+    proportion = round(len(potential_yesands) / len(predictions) * 100,2) 
+    print(f"{len(potential_yesands)} predictions, {proportion}% of all predictions, were yes-ands for a confidence threshold of {args.threshold}.")
+
+    filtered_predictions_fp = args.fp[:args.fp.find('/')+1] + f'filtered_{args.threshold*100}_' + args.fp[args.fp.find('/')+1:]
+    with open(filtered_predictions_fp, 'w') as f: 
+        json.dump(potential_yesands, f, indent=4) 
+
+
+if __name__ == "__main__": 
+    main()

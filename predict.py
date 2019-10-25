@@ -5,9 +5,10 @@ import numpy as np
 import torch 
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from transformers import BertTokenizer, BertConfig, BertModel, BertForSequenceClassification, AdamW
+from transformers import RobertaTokenizer, RobertaForSequenceClassification
 from transformers.optimization import WarmupLinearSchedule 
 from argparse import ArgumentParser
-from utils import build_segment_ids, MAX_LEN, ROBERTA_MAX_LEN
+from utils import build_segment_ids, MAX_LEN, ROBERTA_MAX_LEN, get_roberta_inputs 
 
 import re 
 import os
@@ -17,51 +18,59 @@ from tqdm import tqdm
 from pprint import pformat
 
 logger = logging.getLogger(__file__)
-PREDICTION_BATCH_SIZE = 256
+PREDICTION_BATCH_SIZE = 128
 
 
 def get_data_loader(args, input_data, tokenizer):
 
-    cache_fp = args.data_path[:args.data_path.rfind('.')] + '_cache'
-    if os.path.isfile(cache_fp) and False: 
-        logger.info("Loading tokenized data from cache...")
-        input_ids = torch.load(cache_fp)
+    cache_fp = f"{args.data_path.replace('.json', '')}_{args.model_checkpoint}_cache"
+    #forget about caching for now
 
-    else:
+    # to quickly test everything works, let input data be of one prediction batch size 
+    if args.test:
+        input_data = input_data[:PREDICTION_BATCH_SIZE]
+    # format input as ROBERTA input 
+    if 'roberta' in args.model: 
+        input_ids, segment_ids, attention_masks = [], [], []
+        for sample in input_data: 
+            i, s, a = get_roberta_inputs(seq1=sample['p'], seq2=sample['r'], tokenizer=tokenizer)
+            input_ids.append(i)
+            segment_ids.append(s) 
+            attention_masks.append(a) 
+
     # format sentence with BERT special tokens
+    elif 'bert' in args.model: 
         sentences = []
         for sample in input_data: 
             sentence = '[CLS] {} [SEP] {} [SEP]'.format(sample['p'], sample['r'])
             sentences.append(sentence)
 
         # encode to BERT tokens
-
         logger.info("Tokenize input data...")
         input_ids = [tokenizer.encode(sentence) for sentence in sentences]
-        torch.save(input_ids, cache_fp)
+
+        # crop sequences longer than args.max_len
+        for i in reversed(range(len(input_ids))): 
+            if len(input_ids[i]) > args.max_len: 
+                input_ids[i] = input_ids[i][:args.max_len]
+
+        # pad to args.max_len
+        input_ids = pad_sequences(input_ids, maxlen=args.max_len, truncating="post", padding="post")
+
+        # get attention mask
+        attention_masks = [] 
+        for seq in input_ids: 
+            attention_masks.append([float(i>0) for i in seq])
+
+        # get segment information
+        segment_ids = build_segment_ids(input_ids)
+
+
+        
 
     # dialogue ids for tracking purposes 
-    dialogue_idx = [[sample['idx']]*MAX_LEN for sample in input_data] 
-
-    prev_len = len(input_ids)
-    # remove sequences longer than MAX_LEN
-    for i in reversed(range(len(input_ids))): 
-        if len(input_ids[i]) > MAX_LEN: 
-            input_ids.pop(i)
-            dialogue_idx.pop(i) 
-
-    logger.info("{} samples were removed as it exceeded the maximum sequence length of {}.".format(prev_len - len(input_ids), MAX_LEN))
-
-    # pad to MAX_LEN
-    input_ids = pad_sequences(input_ids, maxlen=MAX_LEN, truncating="post", padding="post")
-
-    # get attention mask
-    attention_masks = [] 
-    for seq in input_ids: 
-        attention_masks.append([float(i>0) for i in seq])
-
-    # get segment information
-    segment_ids = build_segment_ids(input_ids)
+    # need to match max_len 
+    dialogue_idx = [[sample['idx']]*args.max_len for sample in input_data] 
 
     # wrap as tensors
     dialogue_idx = torch.tensor(dialogue_idx)
@@ -98,7 +107,11 @@ def predict_label(args, model, prediction_dataloader, data_to_predict):
         # don't store gradients
         with torch.no_grad(): 
             # forward pass
-            logits = model(b_input_ids, b_attention_masks, b_segment_ids)
+            if 'roberta' in args.model: 
+                logits = model(b_input_ids, token_type_ids=None, attention_mask=b_attention_masks)
+            elif 'bert' in args.model: 
+                logits = model(b_input_ids, b_attention_masks, b_segment_ids)
+            
 
             softmax_logits = torch.nn.functional.softmax(logits[0], dim=1).cpu().numpy()
 
@@ -138,6 +151,7 @@ def predict():
     parser.add_argument("--data_path", default="data/reformatted_cornell.json", help="Provide a datapath for which predictions will be made.")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
     parser.add_argument("--predictions_folder", default="data/", help="Provide a folderpath for which predictions will be saved to.")
+    parser.add_argument("--test", default=False, dest='test', action='store_true', help='runs validation after 1 training step')
 
     args = parser.parse_args()
 
@@ -145,8 +159,18 @@ def predict():
     logger.info("Arguments: {}".format(pformat(args)))
 
     logger.info("Loading model and tokenizer.")
-    model = BertForSequenceClassification.from_pretrained(args.model_checkpoint)
-    tokenizer = BertTokenizer.from_pretrained(args.model)
+    if 'roberta' in args.model: 
+        model = RobertaForSequenceClassification.from_pretrained(args.model_checkpoint)
+        tokenizer = RobertaTokenizer.from_pretrained(args.model_checkpoint) 
+        args.max_len = ROBERTA_MAX_LEN
+    elif 'bert' in args.model: 
+        model = BertForSequenceClassification.from_pretrained(args.model_checkpoint)
+        tokenizer = BertTokenizer.from_pretrained(args.model_checkpoint)
+        args.max_len = MAX_LEN
+    else: 
+        error = f"Invalid model type given for args.model: {args.model}. Must either contain 'bert' or 'roberta"
+        logger.info(error)
+        return 
 
     logger.info("Loading data to predict: {}".format(args.data_path))
     data_to_predict = get_cornell_data(args.data_path)
@@ -158,9 +182,8 @@ def predict():
     predictions = predict_label(args, model, prediction_dataloader, data_to_predict)
     logger.info("Predictions complete for {} dialogue pairs. ".format(len(predictions)))
 
-
     logger.info("Saving predictions...")
-    predictions_fp = args.predictions_folder + 'predictions_{}.json'.format(re.sub('runs/', '', args.model_checkpoint))
+    predictions_fp = args.predictions_folder + 'predictions_{}.json'.format(re.sub('runs/', '', args.model_checkpoint[:-1]))
     with open(predictions_fp, 'w') as f: 
         json.dump(predictions, f, indent=4)
     logger.info("Predictions saved to {}.".format(predictions_fp))

@@ -15,7 +15,7 @@ from transformers import RobertaTokenizer, RobertaConfig, RobertaForSequenceClas
 from transformers.optimization import WarmupLinearSchedule
 from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint
-from ignite.metrics import Accuracy, Loss, MetricsLambda, RunningAverage, Precision, Recall
+from ignite.metrics import Accuracy, Loss, MetricsLambda, RunningAverage, Average, Precision, Recall
 from ignite.contrib.metrics import GpuInfo
 from ignite.contrib.handlers import ProgressBar, PiecewiseLinear
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, OutputHandler, OptimizerParamsHandler
@@ -120,20 +120,24 @@ def train():
         b_input_ids, b_input_mask, b_input_segment, b_labels = batch
         
         with torch.no_grad(): 
-            logits = model(b_input_ids, token_type_ids = b_input_segment, attention_mask=b_input_mask)
-            logits = logits[0]
+            loss, logits = model(b_input_ids, token_type_ids = b_input_segment, attention_mask=b_input_mask, lables=b_labels)
             label_ids = b_labels
 
-        return logits, label_ids
+        return logits, label_ids, loss.item() 
     evaluator = Engine(inference)
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED, lambda _: evaluator.run(valid_loader))
 
     RunningAverage(output_transform=lambda x: x[0]).attach(trainer, "loss") 
     RunningAverage(Accuracy(output_transform=lambda x: (x[1], x[2]))).attach(trainer, "accuracy")
-    GpuInfo().attach(trainer, name='gpu')
+    if torch.cuda.is_available(): 
+        GpuInfo().attach(trainer, name='gpu')
 
-    metrics = {"recall": Recall(output_transform=lambda x: (x[0], x[1])), "precision": Precision(output_transform=lambda x: (x[0], x[1])), "accuracy": Accuracy(output_transform=lambda x: (x[0], x[1]))}
+    recall = Recall(output_transform=lambda x: (x[0], x[1]))
+    precision = Precision(output_transform=lambda x: (x[0], x[1]))
+    F1 = (precision * recall * 2 / (precision + recall)).mean()
+    accuracy = Accuracy(output_transform=lambda x: (x[0], x[1]))
+    metrics = {"recall": recall, "precision": precision, "f1": F1, "accuracy": accuracy, "loss": Average(output_transform=lambda x: x[2])}
 
     for name, metric in metrics.items(): 
         metric.attach(evaluator, name) 
@@ -156,7 +160,7 @@ def train():
     getattr(model, 'module', model).config.to_json_file(os.path.join(tb_logger.writer.logdir, CONFIG_NAME))
     tokenizer.save_vocabulary(tb_logger.writer.logdir)
 
-    trainer.run(train_loader, max_epochs = args.n_epochs)
+    trainer.run(train_loader[:10], max_epochs = args.n_epochs)
 
     if args.n_epochs > 0: 
         os.rename(checkpoint_handler._saved[-1][1][-1], os.path.join(tb_logger.writer.logdir, WEIGHTS_NAME))  # TODO: PR in ignite to have better access to saved file paths (cleaner)
