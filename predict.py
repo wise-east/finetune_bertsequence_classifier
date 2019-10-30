@@ -108,7 +108,9 @@ def predict_label(args, model, prediction_dataloader, data_to_predict):
         with torch.no_grad(): 
             # forward pass
             if 'roberta' in args.model: 
-                logits = model(b_input_ids, token_type_ids=None, attention_mask=b_attention_masks)
+                # logits = model(b_input_ids, token_type_ids=None, attention_mask=b_attention_masks)
+                logits = model(b_input_ids, token_type_ids=b_segment_ids, attention_mask=b_attention_masks)
+
             elif 'bert' in args.model: 
                 logits = model(b_input_ids, b_attention_masks, b_segment_ids)
             

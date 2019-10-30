@@ -79,6 +79,14 @@ def train():
     # model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
     model = RobertaForSequenceClassification.from_pretrained(args.pretrained_path, cache_dir='../')
 
+    ### START MODEL MODIFICATION
+    # fix token type embeddings for finetuning. Without this, the model can only take 0s as valid input for token_type_ids 
+    model.config.type_vocab_size = 2 
+    model.roberta.embeddings.token_type_embeddings = torch.nn.Embedding(2, model.config.hidden_size)
+    model.roberta.embeddings.token_type_embeddings.weight.data.normal_(mean=0.0, std=model.config.initializer_range)
+
+    ### END MOD
+
     model.to(args.device)
 
     param_optimizer = list(model.named_parameters())
@@ -105,8 +113,8 @@ def train():
 
         optimizer.zero_grad()
         #roberta has issues with token_type_ids 
-        # loss, logits = model(b_input_ids, token_type_ids=b_input_segment, attention_mask=b_input_mask, labels=b_labels)
-        loss, logits = model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask, labels=b_labels)
+        loss, logits = model(b_input_ids, token_type_ids=b_input_segment, attention_mask=b_input_mask, labels=b_labels)
+        # loss, logits = model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask, labels=b_labels)
 
 
         loss.backward() 
@@ -128,8 +136,8 @@ def train():
         
         with torch.no_grad(): 
             #roberta has issues with token_type_ids 
-            loss, logits = model(b_input_ids, token_type_ids = None, attention_mask=b_input_mask, labels=b_labels)
-            # logits = model(b_input_ids, token_type_ids = b_input_segment, attention_mask=b_input_mask)
+            # loss, logits = model(b_input_ids, token_type_ids = None, attention_mask=b_input_mask, labels=b_labels)
+            loss, logits = model(b_input_ids, token_type_ids = b_input_segment, attention_mask=b_input_mask, labels=b_labels)
             label_ids = b_labels
 
         return logits, label_ids, loss.item()
