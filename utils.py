@@ -10,7 +10,7 @@ from typing import *
 logger = logging.getLogger(__file__)
 
 YESAND_DATAPATH = 'data/yes-and-data.json'
-MAX_LEN = 128
+BERT_MAX_LEN = 256
 ROBERTA_MAX_LEN = 256
 
 def calc_metrics(pred, labels): 
@@ -145,20 +145,25 @@ def build_bert_input(data, data_path, tokenizer):
     sequence: "[CLS] <sentence1> [SEP] <sentence2> [SEP]"
     """
 
-    all_samples = [] 
-    for non_yesand in data['non-yes-and']['cornell']: 
-        seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['prompt'], non_yesand['response'])
-        all_samples.append([0, seq])
+    cache_fp = f"{data_path[:data_path.rfind('.')]}_{type(tokenizer).__name__}_{str(BERT_MAX_LEN)}_cache"
+    if os.path.isfile(cache_fp): 
+        logger.info("Loading tokenized data from cache...")
+        all_samples = torch.load(cache_fp)
+        return all_samples
+
+    bert_sequences = [] 
+    for k in data['non-yes-and'].keys():
+        for non_yesand in data['non-yes-and'][k]: 
+            seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['p'], non_yesand['r'])
+            bert_sequences.append([0, seq])
     
     for k in data['yes-and'].keys(): 
         for yesand in data['yes-and'][k]: 
-            seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['prompt'], yesand['response'])
-            all_samples.append([1, seq])
-        
-    random.shuffle(all_samples)
+            seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['p'], yesand['r'])
+            bert_sequences.append([1, seq])
 
-    sentences = [x[1] for x in all_samples]
-    labels = [x[0] for x in all_samples]
+    sentences = [x[1] for x in bert_sequences]
+    labels = [x[0] for x in bert_sequences]
     logger.info("Tokenizing loaded data...")
     tokenized_texts = [tokenizer.encode(sentence) for sentence in sentences]
 
@@ -176,12 +181,15 @@ def build_bert_input(data, data_path, tokenizer):
 
 
     # pad input to MAX_LEN
-    input_ids = pad_sequences(tokenized_texts, maxlen=MAX_LEN, dtype="long", truncating="post", padding="post")
+    input_ids = pad_sequences(tokenized_texts, maxlen=BERT_MAX_LEN, dtype="long", truncating="post", padding="post")
 
     # get attention masks and segment ids 
     attention_masks = build_attention_mask(input_ids)
     segment_ids = build_segment_ids(input_ids)
 
-    return input_ids, attention_masks, segment_ids, labels
+    all_samples = [{"input_ids": input_ids[i], "token_type_ids": segment_ids[i], "attention_mask": attention_masks[i], "label": labels[i]} for i in range(len(input_ids))]
+    torch.save(all_samples, cache_fp)
+
+    return all_samples
 
 

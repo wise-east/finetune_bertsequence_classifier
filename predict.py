@@ -1,5 +1,6 @@
 from sklearn.model_selection import train_test_split
 from keras.preprocessing.sequence import pad_sequences 
+from pathlib import Path 
 
 import numpy as np 
 import torch 
@@ -8,7 +9,7 @@ from transformers import BertTokenizer, BertConfig, BertModel, BertForSequenceCl
 from transformers import RobertaTokenizer, RobertaForSequenceClassification
 from transformers.optimization import WarmupLinearSchedule 
 from argparse import ArgumentParser
-from utils import build_segment_ids, MAX_LEN, ROBERTA_MAX_LEN, get_roberta_inputs 
+from utils import build_segment_ids, BERT_MAX_LEN, ROBERTA_MAX_LEN, get_roberta_inputs 
 
 import re 
 import os
@@ -185,6 +186,9 @@ def predict():
     logger.info("Predictions complete for {} dialogue pairs. ".format(len(predictions)))
 
     logger.info("Saving predictions...")
+
+    if not Path(args.predictions_folder).is_dir(): 
+        Path(args.predictions_folder).mkdir(parents=True, exist_ok=False)
     predictions_fp = args.predictions_folder + 'predictions_{}.json'.format(re.sub('runs/', '', args.model_checkpoint[:-1]))
     with open(predictions_fp, 'w') as f: 
         json.dump(predictions, f, indent=4)
