@@ -78,12 +78,12 @@ def get_data_loaders(args: object, data: dict, datapath: str, tokenizer: object)
 
 def train(): 
     parser = ArgumentParser()
-    parser.add_argument("--train_path", type=str, default='data/yesand_train.json', help="Set data path")    
-    parser.add_argument("--valid_path", type=str, default='data/yesand_valid.json', help="Set data path")     
+    parser.add_argument("--train_path", type=str, default='data/yesands_train_iter4.json', help="Set data path")    
+    parser.add_argument("--valid_path", type=str, default='data/yesands_valid.json', help="Set data path")     
 
     parser.add_argument("--correct_bias", type=bool, default=False, help="Set to true to correct bias for Adam optimizer")
-    parser.add_argument("--lr", type=float, default=5e-6, help="Set learning rate")
-    parser.add_argument("--n_epochs", type=int, default=5, help="Set number of epochs")
+    parser.add_argument("--lr", type=float, default=2e-5, help="Set learning rate")
+    parser.add_argument("--n_epochs", type=int, default=4, help="Set number of epochs")
     parser.add_argument("--num_warmup_steps", type=float, default=1000, help="Set number of warm-up steps")
     parser.add_argument("--num_total_steps", type=float, default=10000, help="Set number of total steps")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")

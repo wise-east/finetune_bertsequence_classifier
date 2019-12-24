@@ -9,7 +9,7 @@ from typing import *
 
 logger = logging.getLogger(__file__)
 
-YESAND_DATAPATH = 'data/yes-and-data.json'
+YESAND_DATAPATH = 'data/yesands_train_iter4.json'
 BERT_MAX_LEN = 256
 ROBERTA_MAX_LEN = 256
 
@@ -118,13 +118,13 @@ def build_roberta_input(data: str, data_path: str, tokenizer: object):
 
     logger.info("Preparing and tokenizing yes-and data...")
     all_samples = [] 
-    for k in data['non-yes-and'].keys():
-        for non_yesand in data['non-yes-and'][k]: 
+    for k in data['non-yesands'].keys():
+        for non_yesand in data['non-yesands'][k]: 
             input_ids, token_type_ids, attention_mask = get_roberta_inputs(non_yesand['p'], non_yesand['r'], tokenizer)
             all_samples.append({"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask, "label": 0})
 
-    for k in data['yes-and'].keys(): 
-        for yesand in data['yes-and'][k]: 
+    for k in data['yesands'].keys(): 
+        for yesand in data['yesands'][k]: 
             input_ids, token_type_ids, attention_mask = get_roberta_inputs(yesand['p'], yesand['r'], tokenizer)
             all_samples.append({"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask, "label": 1})
 
@@ -152,13 +152,13 @@ def build_bert_input(data, data_path, tokenizer):
         return all_samples
 
     bert_sequences = [] 
-    for k in data['non-yes-and'].keys():
-        for non_yesand in data['non-yes-and'][k]: 
+    for k in data['non-yesands'].keys():
+        for non_yesand in data['non-yesands'][k]: 
             seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['p'], non_yesand['r'])
             bert_sequences.append([0, seq])
     
-    for k in data['yes-and'].keys(): 
-        for yesand in data['yes-and'][k]: 
+    for k in data['yesands'].keys(): 
+        for yesand in data['yesands'][k]: 
             seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['p'], yesand['r'])
             bert_sequences.append([1, seq])
 

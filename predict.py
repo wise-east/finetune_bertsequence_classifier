@@ -19,7 +19,7 @@ from tqdm import tqdm
 from pprint import pformat
 
 logger = logging.getLogger(__file__)
-PREDICTION_BATCH_SIZE = 128
+PREDICTION_BATCH_SIZE = 64
 
 
 def get_data_loader(args, input_data, tokenizer):
@@ -137,14 +137,31 @@ def decode_input_id(input_id, tokenizer):
 
     return decoded_text_split[:2]
 
-def get_cornell_data(data_path): 
-    # Load Cornell movie dialogue corpus and and format them in to a list  
+def get_list_data(data_path): 
+    # For loading data already stored in list format
     # Each sample has the following format: {'id': int, 'p': str, 'r': str}
 
     with open(data_path, 'r') as f: 
         data_to_predict = json.load(f)
 
     return data_to_predict
+
+def get_opus_data(data_path:str) -> dict: 
+    # opus_data has the following format: {'filename': 'list of samples'}
+    # Each sample in sublist has the following format: {'id': int, 'p': str, 'r': str}
+    data_to_predict = []
+    with open(data_path, 'r') as f: 
+        data = json.load(f)
+
+    idx = 0 
+    for sublist in data.values(): 
+        for item in sublist: 
+            item.pop('id')
+            item['idx'] = idx
+            idx += 1 
+        data_to_predict.extend(sublist)
+
+    return data_to_predict 
 
 def predict(): 
     """Determine which are yes-ands are not from a given dialogue data set with a finetuned BERT yes-and classifier"""
@@ -153,7 +170,7 @@ def predict():
     parser.add_argument("--model_checkpoint", default="runs/yesand_cornell_bert_base_iter1", help="Provide a directory for a pretrained BERT model.")
     parser.add_argument("--data_path", default="data/reformatted_cornell.json", help="Provide a datapath for which predictions will be made.")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
-    parser.add_argument("--predictions_folder", default="data/", help="Provide a folderpath for which predictions will be saved to.")
+    parser.add_argument("--predictions_folder", default="data/opus_predictions/", help="Provide a folderpath for which predictions will be saved to.")
     parser.add_argument("--test", default=False, dest='test', action='store_true', help='runs validation after 1 training step')
 
     args = parser.parse_args()
@@ -169,14 +186,18 @@ def predict():
     elif 'bert' in args.model: 
         model = BertForSequenceClassification.from_pretrained(args.model_checkpoint)
         tokenizer = BertTokenizer.from_pretrained(args.model_checkpoint)
-        args.max_len = MAX_LEN
+        args.max_len = BERT_MAX_LEN
     else: 
         error = f"Invalid model type given for args.model: {args.model}. Must either contain 'bert' or 'roberta"
         logger.info(error)
         return 
 
     logger.info("Loading data to predict: {}".format(args.data_path))
-    data_to_predict = get_cornell_data(args.data_path)
+
+    if 'cornell' in args.data_path or 'subtle' in args.data_path: 
+        data_to_predict = get_list_data(args.data_path)
+    else: 
+        data_to_predict = get_opus_data(args.data_path)
 
     logger.info("Building data loader...")
     prediction_dataloader = get_data_loader(args, data_to_predict, tokenizer)
@@ -189,7 +210,9 @@ def predict():
 
     if not Path(args.predictions_folder).is_dir(): 
         Path(args.predictions_folder).mkdir(parents=True, exist_ok=False)
-    predictions_fp = args.predictions_folder + 'predictions_{}.json'.format(re.sub('runs/', '', args.model_checkpoint[:-1]))
+    identifier = Path(args.data_path).name 
+    checkpoint = Path(args.model_checkpoint).name 
+    predictions_fp = f"{args.predictions_folder}pred_{checkpoint}_{identifier}"
     with open(predictions_fp, 'w') as f: 
         json.dump(predictions, f, indent=4)
     logger.info("Predictions saved to {}.".format(predictions_fp))

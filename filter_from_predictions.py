@@ -1,6 +1,7 @@
 import json 
 import re 
 from argparse import ArgumentParser
+from pathlib import Path 
 
 def replace_bad_characters(text): 
 
@@ -21,6 +22,8 @@ def filter(predictions, args):
     ''' 
     valid_ending_punctuation = ['.', '!', '?']
     potential_yesands = [] 
+    prompts = [] 
+    repetitions = 0 
     for prediction in predictions: 
         # confidence must be above the threshold 
         if prediction['confidence']['yesand'] < args.threshold*100:
@@ -29,6 +32,12 @@ def filter(predictions, args):
         # process characters that MTURK cannot process: 
         prediction['p'] = replace_bad_characters(prediction['p'])
         prediction['r'] = replace_bad_characters(prediction['r'])
+
+        if prediction['p'] in prompts: 
+            repetitions += 1 
+            continue 
+        else: 
+            prompts.append(prediction['p'])
 
         # remove instances with ... 
         if '...' in  prediction['p'] or '...' in prediction['r']: 
@@ -43,6 +52,8 @@ def filter(predictions, args):
         
         # if all criteria are passed, add to potential yes-ands 
         potential_yesands.append(prediction)
+
+    print(f"There were {repetitions} in the prediction file")
 
     return potential_yesands
 
@@ -60,9 +71,9 @@ def main():
     potential_yesands = filter(predictions, args)
 
     proportion = round(len(potential_yesands) / len(predictions) * 100,2) 
-    print(f"{len(potential_yesands)} predictions, {proportion}% of all predictions, were yes-ands for a confidence threshold of {args.threshold}.")
+    print(f"{len(potential_yesands)} predictions, {proportion}% of {len(predictions)} predictions, were yes-ands for a confidence threshold of {args.threshold}.")
 
-    filtered_predictions_fp = args.fp[:args.fp.find('/')+1] + f'filtered_{args.threshold*100}_' + args.fp[args.fp.find('/')+1:]
+    filtered_predictions_fp = Path(args.fp).parent / f'filtered_{args.threshold*100}_{Path(args.fp).name}'
     with open(filtered_predictions_fp, 'w') as f: 
         json.dump(potential_yesands, f, indent=4) 
 
