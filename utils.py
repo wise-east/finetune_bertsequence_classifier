@@ -152,15 +152,25 @@ def build_bert_input(data, data_path, tokenizer):
         return all_samples
 
     bert_sequences = [] 
-    for k in data['non-yesands'].keys():
-        for non_yesand in data['non-yesands'][k]: 
-            seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['p'], non_yesand['r'])
-            bert_sequences.append([0, seq])
+
+    # modification for turn classification task 
+    if 'turn' in data_path:
+        for instance in data:
+            seq = "[CLS] {} [SEP] {} [SEP]".format(instance['p'], instance['r'])
+            bert_sequences.append([instance['label'], seq])
+
+    # regular yes-and classifier 
+    else: 
     
-    for k in data['yesands'].keys(): 
-        for yesand in data['yesands'][k]: 
-            seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['p'], yesand['r'])
-            bert_sequences.append([1, seq])
+        for k in data['non-yesands'].keys():
+            for non_yesand in data['non-yesands'][k]: 
+                seq = "[CLS] {} [SEP] {} [SEP]".format(non_yesand['p'], non_yesand['r'])
+                bert_sequences.append([0, seq])
+        
+        for k in data['yesands'].keys(): 
+            for yesand in data['yesands'][k]: 
+                seq = "[CLS] {} [SEP] {} [SEP]".format(yesand['p'], yesand['r'])
+                bert_sequences.append([1, seq])
 
     sentences = [x[1] for x in bert_sequences]
     labels = [x[0] for x in bert_sequences]
