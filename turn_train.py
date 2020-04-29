@@ -83,14 +83,17 @@ def train():
 
     logger.info("Prepare datasets")
 
-    logger.info("Loading train set...")
-
     train_data = get_data(args.train_path)
-    train_loader, train_sampler = get_data_loaders(args, train_data, args.train_path, tokenizer)
-
-    logger.info("Loading validation set...")
-
     valid_data = get_data(args.valid_path)
+
+    if arg.test: 
+        train_data = train_data[:100]
+        valid_data = valid_data[:100]
+
+    logger.info("Loading train set...")
+    train_loader, train_sampler = get_data_loaders(args, train_data, args.train_path, tokenizer)
+    
+    logger.info("Loading validation set...")
     valid_loader, valid_sampler = get_data_loaders(args, valid_data, args.valid_path,  tokenizer)
 
 
@@ -118,6 +121,8 @@ def train():
 
     trainer = Engine(update)     
 
+    val_result_f = Path('turn_val_prediction.txt').open('w')
+
     # Evaluation function and evaluator 
     def inference(engine, batch): 
         model.eval() 
@@ -130,6 +135,8 @@ def train():
             # loss, logits = model(b_input_ids, token_type_ids = None, attention_mask=b_input_mask, labels=b_labels)
             loss, logits = model(b_input_ids, token_type_ids = b_input_segment, attention_mask=b_input_mask, labels=b_labels)
             label_ids = b_labels
+
+
 
         return logits, label_ids, loss.item()
     evaluator = Engine(inference)
@@ -177,6 +184,9 @@ def train():
     if args.n_epochs > 0: 
         os.rename(checkpoint_handler._saved[-1][1][-1], os.path.join(tb_logger.writer.logdir, WEIGHTS_NAME))  # TODO: PR in ignite to have better access to saved file paths (cleaner)
         tb_logger.close()
+
+
+    val_result_f.close()
 
 if __name__ =="__main__": 
     train() 

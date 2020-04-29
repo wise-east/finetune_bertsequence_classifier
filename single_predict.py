@@ -1,13 +1,13 @@
 import numpy as np 
 import torch
-from utils import build_segment_ids, MAX_LEN
+from utils import build_segment_ids, BERT_MAX_LEN
 from keras.preprocessing.sequence import pad_sequences 
-from pytorch_transformers import BertTokenizer, BertConfig, BertModel, BertForSequenceClassification, AdamW, WEIGHTS_NAME, CONFIG_NAME
+from transformers import BertTokenizer, BertForSequenceClassification
 from argparse import ArgumentParser
 
 def make_bert_input(prompt, response, tokenizer): 
     sentence = "[CLS] {} [SEP] {} [SEP]".format(prompt, response)
-    input_ids = pad_sequences([tokenizer.encode(sentence)], maxlen=MAX_LEN, truncating="post", padding="post") 
+    input_ids = pad_sequences([tokenizer.encode(sentence)], maxlen=BERT_MAX_LEN, truncating="post", padding="post") 
     return input_ids
 
 def predict_single(model, tokenizer, prompt, response): 
@@ -42,7 +42,7 @@ def predict_single(model, tokenizer, prompt, response):
   
 def main(): 
     parser = ArgumentParser()
-    parser.add_argument("--model_checkpoint", default="runs/yesand_bert_classifier", help="Provide a directory for a pretrained BERT model.")
+    parser.add_argument("--model_checkpoint", default="runs/yesand_bert_classifier8577", help="Provide a directory for a pretrained BERT model.")
     args = parser.parse_args()
 
     model = BertForSequenceClassification.from_pretrained(args.model_checkpoint)

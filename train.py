@@ -78,8 +78,8 @@ def get_data_loaders(args: object, data: dict, datapath: str, tokenizer: object)
 
 def train(): 
     parser = ArgumentParser()
-    parser.add_argument("--train_path", type=str, default='data/yesands_train_iter4.json', help="Set data path")    
-    parser.add_argument("--valid_path", type=str, default='data/yesands_valid.json', help="Set data path")     
+    parser.add_argument("--train_path", type=str, default='data/spolin-train-acl.json', help="Set data path")    
+    parser.add_argument("--valid_path", type=str, default='data/spolin-valid.json', help="Set data path")     
 
     parser.add_argument("--correct_bias", type=bool, default=False, help="Set to true to correct bias for Adam optimizer")
     parser.add_argument("--lr", type=float, default=2e-5, help="Set learning rate")
@@ -88,7 +88,7 @@ def train():
     parser.add_argument("--num_total_steps", type=float, default=10000, help="Set number of total steps")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device (cuda or cpu)")
     parser.add_argument("--max_grad_norm", type=float, default=1.0, help="Set maximum gradient normalization.")
-    parser.add_argument("--pretrained_path", type=str, default='roberta-base', help="Choose which pretrained model to use (bert-base-uncased, roberta-base, roberta-large, roberta-large-mnli)")    
+    parser.add_argument("--pretrained_path", type=str, default='bert-base-uncased', help="Choose which pretrained model to use (bert-base-uncased, roberta-base, roberta-large, roberta-large-mnli)")    
     parser.add_argument("--batch_size", type=int, default=32, help="Provide the batch size")    
     parser.add_argument("--random_seed", type=int, default=42, help="Set the random seed")
     parser.add_argument("--test", action='store_true', help="If true, run with small dataset for testing code")

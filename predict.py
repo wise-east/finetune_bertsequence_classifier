@@ -124,7 +124,7 @@ def predict_label(args, model, prediction_dataloader, data_to_predict):
             # TODO: modify how you want to store your prediction results
             for dialogue_idx, input_id, softmax_logit in zip(b_dialogue_idx, b_input_ids, softmax_logits): 
                 idx = int(dialogue_idx[0].cpu().numpy())
-                result = {'idx': idx, 'p': idx_to_data[idx]['p'], 'r': idx_to_data[idx]['r'], 'confidence': {'yesand': round(softmax_logit[1]*100, 2) , 'nonyesand': round(softmax_logit[0]*100, 2)}}
+                result = {'idx': idx, 'p': idx_to_data[idx]['p'], 'r': idx_to_data[idx]['r'], 'yesand-confidence':round(softmax_logit[1]*100, 2)}
                 predictions.append(result)
 
     return predictions
@@ -194,10 +194,10 @@ def predict():
 
     logger.info("Loading data to predict: {}".format(args.data_path))
 
-    if 'cornell' in args.data_path or 'subtle' in args.data_path: 
-        data_to_predict = get_list_data(args.data_path)
-    else: 
+    if 'opus' in args.data_path: 
         data_to_predict = get_opus_data(args.data_path)
+    else: 
+        data_to_predict = get_list_data(args.data_path)
 
     logger.info("Building data loader...")
     prediction_dataloader = get_data_loader(args, data_to_predict, tokenizer)
